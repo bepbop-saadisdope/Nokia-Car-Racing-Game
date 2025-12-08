@@ -9,13 +9,13 @@ SCREEN_HEIGHT	equ 25
 ; Road layout
 GRASS_WIDTH	equ 15
 ROAD_START	equ 15
-ROAD_WIDTH	equ 50
-ROAD_END	equ 65
+ROAD_WIDTH	equ 48
+ROAD_END	equ 63
 
 ; Lane positions
-LANE_LEFT	equ 27
-LANE_CENTER	equ 40
-LANE_RIGHT	equ 53
+LANE_LEFT	equ 23
+LANE_CENTER	equ 39
+LANE_RIGHT	equ 55
 
 ; Lane numbers
 LANE_NUM_LEFT	equ 0
@@ -23,7 +23,7 @@ LANE_NUM_CENTER	equ 1
 LANE_NUM_RIGHT	equ 2
 
 ; Lane dividers
-LANE_DIV1	equ 33
+LANE_DIV1	equ 31
 LANE_DIV2	equ 47
 
 ; Colors
@@ -790,6 +790,7 @@ draw_single_lane:
 	push cx
 	push di
 	push es
+	push dx
 	
 	mov ax, 0xB800
 	mov es, ax
@@ -800,7 +801,7 @@ lane_loop:
 	add ax, [lane_offset]
 	
 	push cx
-	mov cx, 4
+	mov cx, 6
 	mov dx, 0
 	div cx
 	pop cx
@@ -808,6 +809,8 @@ lane_loop:
 	cmp dx, 0
 	je draw_marker
 	cmp dx, 1
+	je draw_marker
+	cmp dx, 2
 	je draw_marker
 	jmp skip_marker
 	
@@ -823,7 +826,7 @@ draw_marker:
 	add di, ax
 	pop dx
 	
-	mov byte [es:di], 0xDB
+	mov byte [es:di], 0xB3
 	mov byte [es:di+1], COLOR_LANE
 	
 skip_marker:
@@ -831,6 +834,7 @@ skip_marker:
 	cmp cx, SCREEN_HEIGHT
 	jl lane_loop
 	
+	pop dx
 	pop es
 	pop di
 	pop cx
@@ -1470,6 +1474,90 @@ show_instruction_screen:
 	mov bh, 22
 	mov bl, 23
 	call print_string
+	pop si
+	pop bx
+	pop ax
+	ret
+
+
+show_main_screen:
+	push ax
+	push bx
+	push si
+	push di
+	push es
+	call clear_screen
+	
+	; Draw the game background (grass, road, lanes)
+	call draw_background
+	
+	; Draw the player car
+	call draw_player_car
+	
+	; Draw the HUD
+	call display_hud
+	
+	; Draw "Press any key to start" message in the center
+	mov ax, 0xB800
+	mov es, ax
+	mov di, (12 * SCREEN_WIDTH + 21) * 2
+	
+	; Draw a box around the message
+	mov byte [es:di], 0xC9
+	mov byte [es:di+1], 0x0E
+	add di, 2
+	mov cx, 37
+draw_top_border:
+	mov byte [es:di], 0xCD
+	mov byte [es:di+1], 0x0E
+	add di, 2
+	loop draw_top_border
+	mov byte [es:di], 0xBB
+	mov byte [es:di+1], 0x0E
+	
+	; Middle line with text
+	mov di, (13 * SCREEN_WIDTH + 21) * 2
+	mov byte [es:di], 0xBA
+	mov byte [es:di+1], 0x0E
+	add di, 2
+	mov byte [es:di], ' '
+	mov byte [es:di+1], 0x0E
+	add di, 2
+	
+	; Write "Press any key to start..."
+	mov si, press_start_msg
+write_start_msg:
+	lodsb
+	cmp al, 0
+	je finish_start_msg
+	mov byte [es:di], al
+	mov byte [es:di+1], 0x0F
+	add di, 2
+	jmp write_start_msg
+	
+finish_start_msg:
+	mov byte [es:di], ' '
+	mov byte [es:di+1], 0x0E
+	add di, 2
+	mov byte [es:di], 0xBA
+	mov byte [es:di+1], 0x0E
+	
+	; Bottom border
+	mov di, (14 * SCREEN_WIDTH + 21) * 2
+	mov byte [es:di], 0xC8
+	mov byte [es:di+1], 0x0E
+	add di, 2
+	mov cx, 37
+draw_bottom_border:
+	mov byte [es:di], 0xCD
+	mov byte [es:di+1], 0x0E
+	add di, 2
+	loop draw_bottom_border
+	mov byte [es:di], 0xBC
+	mov byte [es:di+1], 0x0E
+	
+	pop es
+	pop di
 	pop si
 	pop bx
 	pop ax
@@ -2392,7 +2480,7 @@ update_all_positions:
 update_lane_scrolling:
 	push ax
 	inc word [lane_offset]
-	cmp word [lane_offset], 4
+	cmp word [lane_offset], 6
 	jl lane_scroll_done
 	mov word [lane_offset], 0
 lane_scroll_done:
@@ -2876,11 +2964,13 @@ wait_intro:
 wait_instructions:
 	mov ah, 0x00
 	int 0x16
+	call show_main_screen
+wait_main_screen:
+	mov ah, 0x00
+	int 0x16
 	mov byte [in_game], 1
+	mov byte [game_started], 1
 	call clear_screen
-wait_game_start:
-	cmp byte [game_started], 0
-	je wait_game_start
 game_loop:
 	cmp byte [game_paused], 0
 	je game_running
